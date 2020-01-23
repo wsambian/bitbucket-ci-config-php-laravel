@@ -1,0 +1,77 @@
+image: php:7.3-fpm
+pipelines:
+  default:
+# Not needed unless you're doing feature tests.
+#    - step:
+#        name: Build
+#        image: node:8.9.4
+#        caches:
+#          - node
+#        script:
+#          - npm install
+#          - npm run prod
+#        artifacts:
+#          - public/**
+    - step:
+        name: Test
+        caches:
+          - composer
+        artifacts:
+          - storage/**
+          - vendor/**
+          - public/**
+          - .env
+        script:
+          #Update Image
+          - apt-get update && apt-get upgrade -y
+
+          #Install Zip
+          - apt-get install -qy zlib1g-dev zip unzip
+          - apt-get install -qy libzip-dev
+          - docker-php-ext-install zip
+
+          #Install Git, Curl and ssh
+          - apt-get install -qy git
+          - apt-get install -qy curl
+          - apt-get install -qy ssh
+
+          #Install MySql
+          - apt-get install -qy default-mysql-client
+          - docker-php-ext-install pdo_mysql
+
+          #Install Crypt
+          - apt-get install -qy libmcrypt-dev
+          - yes | pecl install mcrypt-1.0.2
+
+          #Install Composer Platform Reqs (libjpeg, libpng, bcmath, gd and pcntl)
+          - apt-get install -qy libjpeg-dev libpng-dev libfreetype6-dev
+          - docker-php-ext-install bcmath
+          - docker-php-ext-configure gd --with-freetype-dir=/usr/include/ --with-jpeg-dir=/usr/include/
+          - docker-php-ext-install -j$(nproc) gd
+          - docker-php-ext-install pcntl
+
+          #Copy Environment File
+          - ln -f -s .env.pipeline .env
+
+          #Install Composer
+          - curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+          - composer install
+
+          #Generate key & Migrate Database
+          - php artisan key:generate
+          - php artisan migrate
+
+          #Run Test Suite
+          - ./vendor/bin/phpunit --verbose
+        services:
+          #Add MySql Database
+          - mysql
+definitions:
+  services:
+    mysql:
+      image: mysql:5.7
+      environment:
+        MYSQL_ALLOW_EMPTY_PASSWORD: 'true'
+        MYSQL_DATABASE: 'supremeventory'
+        # MYSQL_PASSWORD: 
+        MYSQL_USER: 'root'
